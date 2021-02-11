@@ -405,18 +405,8 @@ void publishCloudStatus() {
 }
 
 void publishTcpStatus() {
-  // if (!tcpPending) {
-  //   return;
-  // }
-  // tcpPending = 0;
-
   if (client.connected()) {
     String statusMessage;
-    // if (meterPending) {
-    //   getStatus(&statusMessage);
-    //   client.print("kb-status: ");
-    //   client.println(statusMessage);
-    // }
     getStatus(&statusMessage);
     client.print("kb-status: ");
     client.println(statusMessage);
