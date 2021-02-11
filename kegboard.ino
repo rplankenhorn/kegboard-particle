@@ -54,7 +54,7 @@ SerialLogHandler logHandler;
 TCPServer server = TCPServer(TCP_SERVER_PORT);
 TCPClient client;
 
-char clientBuffer[TCP_CLIENT_INCOMING_BUFSIZE] = { '\0' };
+char clientBuffer[TCP_CLIENT_INCOMING_BUFSIZE] = {'\0'};
 unsigned int clientBufferPos = 0;
 
 mdns::MDNS mdnsImpl;
@@ -91,23 +91,25 @@ typedef struct {
 
 temp_t temps[NUM_METERS];
 
-#define CREATE_METER_ISR(METER_NUM) \
-  void meter##METER_NUM##Interrupt(void) { \
-    detachInterrupt(METER##METER_NUM##_PIN); \
-    meters[METER_NUM].ticks++; \
-    cloudPending = consolePending = tcpPending = meterPending = 1; \
-    attachInterrupt(METER##METER_NUM##_PIN, meter##METER_NUM##Interrupt, FALLING); \
+#define CREATE_METER_ISR(METER_NUM)                                      \
+  void meter##METER_NUM##Interrupt(void) {                               \
+    detachInterrupt(METER##METER_NUM##_PIN);                             \
+    meters[METER_NUM].ticks++;                                           \
+    cloudPending = consolePending = tcpPending = meterPending = 1;       \
+    attachInterrupt(METER##METER_NUM##_PIN, meter##METER_NUM##Interrupt, \
+                    FALLING);                                            \
   }
 
-#define SETUP_METER(METER_NUM) \
-  do { \
-    memset(&meters[METER_NUM], 0, sizeof(meter_t)); \
-    pinMode(METER##METER_NUM##_PIN, INPUT_PULLUP); \
-    attachInterrupt(METER##METER_NUM##_PIN, meter##METER_NUM##Interrupt, FALLING); \
+#define SETUP_METER(METER_NUM)                                           \
+  do {                                                                   \
+    memset(&meters[METER_NUM], 0, sizeof(meter_t));                      \
+    pinMode(METER##METER_NUM##_PIN, INPUT_PULLUP);                       \
+    attachInterrupt(METER##METER_NUM##_PIN, meter##METER_NUM##Interrupt, \
+                    FALLING);                                            \
   } while (false)
 
-#define SETUP_TEMP(TEMP_NUM) \
-  do { \
+#define SETUP_TEMP(TEMP_NUM)                     \
+  do {                                           \
     memset(&temps[TEMP_NUM], 0, sizeof(temp_t)); \
   } while (false)
 
@@ -138,7 +140,7 @@ int publicMeterTicks(String extra) {
   if (meterNum < 0 || meterNum >= NUM_METERS) {
     return -1;
   }
-  return (int) meters[meterNum].ticks;
+  return (int)meters[meterNum].ticks;
 }
 
 void enableClientWatchdog() {
@@ -146,9 +148,7 @@ void enableClientWatchdog() {
   watchdogEnabled = 1;
 }
 
-void disableClientWatchdog() {
-  watchdogEnabled = 0;
-}
+void disableClientWatchdog() { watchdogEnabled = 0; }
 
 void kickClientWatchdog() {
   if (!watchdogEnabled) {
@@ -176,16 +176,17 @@ bool setupMdns() {
   std::vector<String> subServices;
   subServices.push_back("kegboard");
 
-  bool success = mdnsImpl.setHostname("kegboard") &&
-    mdnsImpl.addService("tcp", "kegboard", TCP_SERVER_PORT, "Kegboard") &&
-    mdnsImpl.begin(true);
+  bool success =
+      mdnsImpl.setHostname("kegboard") &&
+      mdnsImpl.addService("tcp", "kegboard", TCP_SERVER_PORT, "Kegboard") &&
+      mdnsImpl.begin(true);
 
   return success;
 }
 
 void addTemperature(char* probe, float temp) {
   for (int i = 0; i < NUM_METERS; i++) {
-   if (strcmp(temps[i].probe, probe) == 0) {
+    if (strcmp(temps[i].probe, probe) == 0) {
       temps[i].temp = temp;
       return;
     }
@@ -193,7 +194,7 @@ void addTemperature(char* probe, float temp) {
   // New probe ID; Store it.
   for (int i = 0; i < NUM_METERS; i++) {
     if (temps[i].probe[0] == '\0') {
-      std::copy(probe, probe+17, temps[i].probe);
+      std::copy(probe, probe + 17, temps[i].probe);
       temps[i].temp = temp;
       return;
     }
@@ -211,11 +212,11 @@ int stepOnewireThermoBus() {
       char buf[64];
       char nameBuf[17];
       // Just finished conversion
-      //writeThermoPacket(&gThermoSensor);
+      // writeThermoPacket(&gThermoSensor);
       thermoSensor.GetTempC(buf);
       thermoSensor.GetName(nameBuf);
       if (buf[0] != '\0') {
-        addTemperature(nameBuf,atof(buf));
+        addTemperature(nameBuf, atof(buf));
         cloudPending = consolePending = tcpPending = thermoPending = 1;
       }
       thermoSensor.Reset();
@@ -281,7 +282,7 @@ void setup() {
 
 void getStatus(String* statusMessage) {
   for (int i = 0; i < NUM_METERS; i++) {
-    meter_t *meter = &meters[i];
+    meter_t* meter = &meters[i];
     unsigned int ticks = meter->ticks;
     statusMessage->concat(String::format("meter%i.ticks=%u ", i, ticks));
   }
@@ -290,12 +291,13 @@ void getStatus(String* statusMessage) {
 void getThermoStatus(String* statusMessage) {
   for (int i = 0; i < NUM_METERS; i++) {
     if (temps[i].probe[0] != '\0') {
-      statusMessage->concat(String::format("temp_%s.temp=%f ", temps[i].probe, temps[i].temp));
+      statusMessage->concat(
+          String::format("temp_%s.temp=%f ", temps[i].probe, temps[i].temp));
     }
   }
 }
 
-void handleCommand(char *command) {
+void handleCommand(char* command) {
   Log.info("Handling command: \"%s\" ...", command);
   String commandString = String(command);
   if (commandString.equals(COMMAND_WATCHDOG_ON)) {
@@ -391,6 +393,7 @@ void publishCloudStatus() {
       lastCloudPublishMillis = millis();
     }
   }
+
   if (thermoPending) {
     statusMessage = "";
     getThermoStatus(&statusMessage);
@@ -402,18 +405,22 @@ void publishCloudStatus() {
 }
 
 void publishTcpStatus() {
-  if (!tcpPending) {
-    return;
-  }
-  tcpPending = 0;
+  // if (!tcpPending) {
+  //   return;
+  // }
+  // tcpPending = 0;
 
   if (client.connected()) {
     String statusMessage;
-    if (meterPending) {
-      getStatus(&statusMessage);
-      client.print("kb-status: ");
-      client.println(statusMessage);
-    }
+    // if (meterPending) {
+    //   getStatus(&statusMessage);
+    //   client.print("kb-status: ");
+    //   client.println(statusMessage);
+    // }
+    getStatus(&statusMessage);
+    client.print("kb-status: ");
+    client.println(statusMessage);
+
     if (thermoPending) {
       getThermoStatus(&statusMessage);
       client.print("kb-thermo: ");
@@ -462,7 +469,8 @@ void loop() {
     publishCloudStatus();
   }
 
-  if ((millis() - lastConsolePublishMillis) >= CONSOLE_PUBLISH_INTERVAL_MILLIS) {
+  if ((millis() - lastConsolePublishMillis) >=
+      CONSOLE_PUBLISH_INTERVAL_MILLIS) {
     publishConsoleStatus();
   }
   meterPending = thermoPending = 0;
