@@ -25,6 +25,7 @@
 
 #define CLOUD_PUBLISH_INTERVAL_MILLIS 1000
 #define TCP_PUBLISH_INTERVAL_MILLIS 250
+#define MQTT_PUBLISH_INTERVAL_MILLIS 250
 #define CONSOLE_PUBLISH_INTERVAL_MILLIS 250
 #define CLIENT_WATCHDOG_TIMEOUT_MILLIS 30000
 
@@ -43,9 +44,14 @@
 #define TCP_SERVER_PORT 8321
 #define TCP_CLIENT_INCOMING_BUFSIZE 256
 
+#define MQTT_TOPIC "kegbot"
+#define MQTT_USERNAME "mosquitto"
+#define MQTT_PASSWORD "mosquitto"
+
 #include "MDNS.h"
 #include "OneWire.h"
 #include "ds1820.h"
+#include "MQTT.h"
 
 #if KEGBOARD_DEBUG
 SerialLogHandler logHandler;
@@ -53,6 +59,10 @@ SerialLogHandler logHandler;
 
 TCPServer server = TCPServer(TCP_SERVER_PORT);
 TCPClient client;
+
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+const uint8_t mqttServer[] = { 192,168,86,10 };
+MQTT mqttClient(mqttServer, 1883, mqttCallback);
 
 char clientBuffer[TCP_CLIENT_INCOMING_BUFSIZE] = { '\0' };
 unsigned int clientBufferPos = 0;
@@ -75,6 +85,9 @@ unsigned long lastConsolePublishMillis;
 volatile unsigned int tcpPending;
 unsigned long lastTcpPublishMillis;
 
+volatile unsigned int mqttPending;
+unsigned long lastMqttPublishMillis;
+
 typedef struct {
   volatile unsigned int ticks;
 } meter_t;
@@ -95,7 +108,7 @@ temp_t temps[NUM_METERS];
   void meter##METER_NUM##Interrupt(void) { \
     detachInterrupt(METER##METER_NUM##_PIN); \
     meters[METER_NUM].ticks++; \
-    cloudPending = consolePending = tcpPending = meterPending = 1; \
+    cloudPending = consolePending = tcpPending = mqttPending = meterPending = 1; \
     attachInterrupt(METER##METER_NUM##_PIN, meter##METER_NUM##Interrupt, FALLING); \
   }
 
@@ -119,6 +132,22 @@ CREATE_METER_ISR(3);
 //
 // Main program
 //
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  char p[length + 1];
+  memcpy(p, payload, length);
+  p[length] = NULL;
+
+  if (!strcmp(p, "RED"))
+      RGB.color(255, 0, 0);
+  else if (!strcmp(p, "GREEN"))
+      RGB.color(0, 255, 0);
+  else if (!strcmp(p, "BLUE"))
+      RGB.color(0, 0, 255);
+  else
+      RGB.color(255, 255, 255);
+  delay(1000);
+}
 
 int resetMeter(int meterNum) {
   if (meterNum < 0 || meterNum >= NUM_METERS) {
@@ -216,7 +245,7 @@ int stepOnewireThermoBus() {
       thermoSensor.GetName(nameBuf);
       if (buf[0] != '\0') {
         addTemperature(nameBuf,atof(buf));
-        cloudPending = consolePending = tcpPending = thermoPending = 1;
+        cloudPending = consolePending = tcpPending = mqttPending = thermoPending = 1;
       }
       thermoSensor.Reset();
     } else if (thermoSensor.Busy()) {
@@ -262,6 +291,8 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   server.begin();
+
+  mqttClient.connect(MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD);
 
   SETUP_METER(0);
   SETUP_METER(1);
@@ -423,6 +454,32 @@ void publishTcpStatus() {
   lastTcpPublishMillis = millis();
 }
 
+void publishMqttStatus() {
+  if (!mqttPending) {
+    return;
+  }
+  mqttPending = 0;
+
+  if (mqttClient.isConnected()) {
+    String statusMessage;
+    if (meterPending) {
+      for (int i = 0; i < NUM_METERS; i++) {
+        meter_t *meter = &meters[i];
+        unsigned int ticks = meter->ticks;
+        mqttClient.publish(String::format("%s/meter/%i", MQTT_TOPIC, i), String::format("%u", ticks));
+      }
+    }
+    if (thermoPending) {
+      for (int i = 0; i < NUM_METERS; i++) {
+        if (temps[i].probe[0] != '\0') {
+          mqttClient.publish(String::format("%s/temp/%i", MQTT_TOPIC, temps[i].probe), String::format("%f", temps[i].temp));
+        }
+      }
+    }
+  }
+  lastMqttPublishMillis = millis();
+}
+
 void publishConsoleStatus() {
   if (!consolePending) {
     return;
@@ -458,6 +515,14 @@ void loop() {
       publishTcpStatus();
     }
   }
+
+  if (mqttClient.isConnected()) {
+    mqttClient.loop();
+    if ((millis() - lastMqttPublishMillis) >= MQTT_PUBLISH_INTERVAL_MILLIS) {
+      publishMqttStatus();
+    }
+  }
+
   if ((millis() - lastCloudPublishMillis) >= CLOUD_PUBLISH_INTERVAL_MILLIS) {
     publishCloudStatus();
   }
