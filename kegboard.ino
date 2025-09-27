@@ -136,7 +136,7 @@ CREATE_METER_ISR(3);
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   char p[length + 1];
   memcpy(p, payload, length);
-  p[length] = NULL;
+  p[length] = '\0';
 
   if (!strcmp(p, "RED"))
       RGB.color(255, 0, 0);
@@ -293,6 +293,18 @@ void setup() {
   server.begin();
 
   mqttClient.connect(MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD);
+
+  for (int i = 0; i < NUM_METERS; i++) {
+    String meterTopic = String::format("homeassistant/sensor/kegbot_meter_%i/config", i);
+    String meterPayload = String::format("{\"name\":\"Flow Meter %i\",\"state_topic\":\"kegbot/meter/%i\",\"unit_of_measurement\":\"pulses\",\"unique_id\":\"kegbot_flow_%i\",\"device\":{\"identifiers\":[\"kegbot_main\"],\"name\":\"Kegbot\"}}", i, i, i);
+    mqttClient.publish(meterTopic.c_str(), meterPayload.c_str(), true);
+
+    String tempTopic = String::format("homeassistant/sensor/kegbot_temp_%i/config", i);
+    String tempPayload = String::format("{\"name\":\"Temperature %i\",\"state_topic\":\"kegbot/temp/%i\",\"unit_of_measurement\":\"C\",\"device_class\":\"temperature\",\"unique_id\":\"kegbot_temp_%i\",\"device\":{\"identifiers\":[\"kegbot_main\"],\"name\":\"Kegbot\"}}", i, i, i);
+    mqttClient.publish(tempTopic.c_str(), tempPayload.c_str(), true);
+  }
+
+  mqttPending = 1;
 
   SETUP_METER(0);
   SETUP_METER(1);
