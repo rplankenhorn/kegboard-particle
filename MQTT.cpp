@@ -1,7 +1,5 @@
 #include "MQTT.h"
 
-#define LOGGING
-
 #define MQTTQOS0_HEADER_MASK        (0 << 1)
 #define MQTTQOS1_HEADER_MASK        (1 << 1)
 #define MQTTQOS2_HEADER_MASK        (2 << 1)

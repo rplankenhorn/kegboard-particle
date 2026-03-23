@@ -45,9 +45,8 @@
 #define TCP_CLIENT_INCOMING_BUFSIZE 256
 
 #define MQTT_TOPIC "kegbot"
-#define MQTT_USERNAME "mosquitto"
-#define MQTT_PASSWORD "mosquitto"
 
+#include "kegboard_config.h"
 #include "MDNS.h"
 #include "OneWire.h"
 #include "ds1820.h"
@@ -61,8 +60,8 @@ TCPServer server = TCPServer(TCP_SERVER_PORT);
 TCPClient client;
 
 void mqttCallback(char* topic, byte* payload, unsigned int length);
-const uint8_t mqttServer[] = { 192,168,86,10 };
-MQTT mqttClient(mqttServer, 1883, mqttCallback);
+const uint8_t mqttServer[] = MQTT_SERVER_IP;
+MQTT mqttClient(mqttServer, MQTT_SERVER_PORT, mqttCallback);
 
 char clientBuffer[TCP_CLIENT_INCOMING_BUFSIZE] = { '\0' };
 unsigned int clientBufferPos = 0;
@@ -134,19 +133,7 @@ CREATE_METER_ISR(3);
 //
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  char p[length + 1];
-  memcpy(p, payload, length);
-  p[length] = '\0';
-
-  if (!strcmp(p, "RED"))
-      RGB.color(255, 0, 0);
-  else if (!strcmp(p, "GREEN"))
-      RGB.color(0, 255, 0);
-  else if (!strcmp(p, "BLUE"))
-      RGB.color(0, 0, 255);
-  else
-      RGB.color(255, 255, 255);
-  delay(1000);
+  // Reserved for future inbound MQTT message handling.
 }
 
 int resetMeter(int meterNum) {
@@ -292,7 +279,7 @@ void setup() {
 
   server.begin();
 
-  mqttClient.connect(MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD);
+  mqttClient.connect(System.deviceID().c_str(), MQTT_USERNAME, MQTT_PASSWORD);
 
   if (mqttClient.isConnected()) {
     for (int i = 0; i < NUM_METERS; i++) {
@@ -470,10 +457,9 @@ void publishMqttStatus() {
   if (!mqttPending) {
     return;
   }
-  mqttPending = 0;
 
   if (mqttClient.isConnected()) {
-    String statusMessage;
+    mqttPending = 0;
     if (meterPending) {
       for (int i = 0; i < NUM_METERS; i++) {
         meter_t *meter = &meters[i];
@@ -484,12 +470,12 @@ void publishMqttStatus() {
     if (thermoPending) {
       for (int i = 0; i < NUM_METERS; i++) {
         if (temps[i].probe[0] != '\0') {
-          mqttClient.publish(String::format("%s/temp/%i", MQTT_TOPIC, temps[i].probe), String::format("%f", temps[i].temp));
+          mqttClient.publish(String::format("%s/temp/%s", MQTT_TOPIC, temps[i].probe), String::format("%f", temps[i].temp));
         }
       }
     }
+    lastMqttPublishMillis = millis();
   }
-  lastMqttPublishMillis = millis();
 }
 
 void publishConsoleStatus() {
@@ -528,7 +514,9 @@ void loop() {
     }
   }
 
-  if (mqttClient.isConnected()) {
+  if (!mqttClient.isConnected()) {
+    mqttClient.connect(System.deviceID().c_str(), MQTT_USERNAME, MQTT_PASSWORD);
+  } else {
     mqttClient.loop();
     if ((millis() - lastMqttPublishMillis) >= MQTT_PUBLISH_INTERVAL_MILLIS) {
       publishMqttStatus();
